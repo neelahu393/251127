@@ -40,8 +40,8 @@
     </div>
 
     <script>
-        const HashKey = 'rsBjnIvMG3VMMWsEynTK3PWiGccHuYiV';  // 測試用 Key
-        const HashIV = 'SdsatSdXm1vH7N3T';
+        const HashKey = 'Bs6NRdV1kNbsVkf0wuyYVcHcHYJTa5y4';  // 測試用 Key
+        const HashIV = 'CHiGeMvvYP1PU6uP';
         const apiURL = 'https://inv.ezpay.com.tw/Api/inv/application/checkBarCode';
 
         async function executeAPI() {
@@ -89,3 +89,4 @@
                 const resultObj = JSON.parse(apiResponse);
                 if (resultObj.Status === 'SUCCESS' && resultObj.Result) {
                     const decrypted = decryptResult
+
