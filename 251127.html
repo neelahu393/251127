@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>ezPay BDV API 完整串接示範</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
+    <style>
+        body { font-family: Arial; max-width: 800px; margin: 20px auto; }
+        .step { margin: 20px 0; padding: 15px; border-left: 4px solid #007bff; background: #f8f9fa; }
+        textarea { width: 100%; height: 100px; font-family: monospace; }
+        button { padding: 10px 20px; background: #007bff; color: white; border: none; cursor: pointer; }
+        .result { background: #d4edda; padding: 15px; margin: 10px 0; border-radius: 5px; }
+    </style>
+</head>
+<body>
+    <h1>ezPay BDV checkBarCode API 串接</h1>
+    
+    <div class="step">
+        <h3>步驟 1: 輸入參數</h3>
+        <label>MerchantID: <input type="text" id="merchantID" value="3883991"></label><br><br>
+        <label>手機條碼: <input type="text" id="cellphoneBarcode" value="ABC.122" maxlength="8"></label>
+        <button onclick="executeAPI()">執行 API 串接</button>
+    </div>
+
+    <div class="step">
+        <h3>步驟 2: 加密過程</h3>
+        <label>原始資料: <textarea id="rawData"></textarea></label><br>
+        <label>PostData (AES加密): <textarea id="postData"></textarea></label><br>
+        <label>CheckValue (SHA256): <textarea id="checkValue"></textarea></label>
+    </div>
+
+    <div class="step">
+        <h3>步驟 3: API 回應</h3>
+        <label>原始回應: <textarea id="apiResponse"></textarea></label>
+    </div>
+
+    <div class="step">
+        <h3>步驟 4: 解密結果</h3>
+        <div id="decryptedResult" class="result"></div>
+    </div>
+
+    <script>
+        const HashKey = 'rsBjnIvMG3VMMWsEynTK3PWiGccHuYiV';  // 測試用 Key
+        const HashIV = 'SdsatSdXm1vH7N3T';
+        const apiURL = 'https://inv.ezpay.com.tw/Api/inv/application/checkBarCode';
+
+        async function executeAPI() {
+            const merchantID = document.getElementById('merchantID').value;
+            const cellphoneBarcode = document.getElementById('cellphoneBarcode').value;
+            const timestamp = Math.floor(Date.now() / 1000);
+
+            // 步驟1: 建立原始資料
+            const rawData = `TimeStamp=${timestamp}&CellphoneBarcode=${cellphoneBarcode}`;
+            document.getElementById('rawData').value = rawData;
+
+            // 步驟2: AES-256-CBC 加密 PostData
+            const keyBytes = CryptoJS.enc.Utf8.parse(HashKey);
+            const ivBytes = CryptoJS.enc.Utf8.parse(HashIV);
+            const encrypted = CryptoJS.AES.encrypt(rawData, keyBytes, {
+                iv: ivBytes, mode: CryptoJS.mode.CBC, padding: CryptoJS.pad.Pkcs7
+            });
+            const postData = encrypted.ciphertext.toString(CryptoJS.enc.Hex);
+            document.getElementById('postData').value = postData;
+
+            // 步驟3: 計算 CheckValue
+            const checkStr = merchantID + postData + HashKey + postData + HashIV;
+            const checkValue = CryptoJS.SHA256(checkStr).toString().toUpperCase();
+            document.getElementById('checkValue').value = checkValue;
+
+            // 步驟4: 發送 POST 請求 (使用 fetch 模擬 cURL)
+            const formData = new URLSearchParams({
+                MerchantID: merchantID,
+                Version: '1.0',
+                RespondType: 'JSON',
+                PostData: postData,
+                CheckValue: checkValue
+            });
+
+            try {
+                const response = await fetch(apiURL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' },
+                    body: formData
+                });
+                const apiResponse = await response.text();
+                document.getElementById('apiResponse').value = apiResponse;
+
+                // 步驟5: 解析並解密 Result
+                const resultObj = JSON.parse(apiResponse);
+                if (resultObj.Status === 'SUCCESS' && resultObj.Result) {
+                    const decrypted = decryptResult
