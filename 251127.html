@@ -2,7 +2,7 @@
 <html>
 <head>
     <meta charset="UTF-8">
-    <title>ezPay BDV API 完整串接示範</title>
+    <title>ezPay BDV checkBarCode API 完整串接示範 (修正版)</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
     <style>
         body { font-family: Arial; max-width: 800px; margin: 20px auto; }
@@ -10,84 +10,141 @@
         textarea { width: 100%; height: 100px; font-family: monospace; }
         button { padding: 10px 20px; background: #007bff; color: white; border: none; cursor: pointer; }
         .result { background: #d4edda; padding: 15px; margin: 10px 0; border-radius: 5px; }
+        .error { background: #f8d7da; color: #721c24; padding: 15px; margin: 10px 0; border-radius: 5px; border-left: 4px solid #dc3545; }
+        .warning { background: #fff3cd; color: #856404; padding: 15px; margin: 10px 0; border-radius: 5px; border-left: 4px solid #ffc107; }
     </style>
 </head>
 <body>
-    <h1>ezPay BDV checkBarCode API 串接</h1>
+    <h1>ezPay BDV checkBarCode API 串接 (已修正)</h1>
     
+    <div class="warning">
+        <strong>注意：</strong>由於 CORS 限制，此頁面只能展示加密邏輯。實際 API 呼叫需在後端執行，或使用測試環境代理。
+    </div>
+
     <div class="step">
         <h3>步驟 1: 輸入參數</h3>
         <label>MerchantID: <input type="text" id="merchantID" value="36267240"></label><br><br>
         <label>手機條碼: <input type="text" id="cellphoneBarcode" value="/8CT65SP" maxlength="8"></label>
-        <button onclick="executeAPI()">執行 API 串接</button>
+        <button onclick="generateRequest()">生成請求資料</button>
+        <button onclick="testDecrypt()">測試解密範例</button>
     </div>
 
     <div class="step">
-        <h3>步驟 2: 加密過程</h3>
+        <h3>步驟 2: 加密過程 (正確版)</h3>
         <label>原始資料: <textarea id="rawData"></textarea></label><br>
-        <label>PostData (AES加密): <textarea id="postData"></textarea></label><br>
-        <label>CheckValue (SHA256): <textarea id="checkValue"></textarea></label>
+        <label>PostData_ (AES加密): <textarea id="postData"></textarea></label><br>
+        <label>CheckValue (SHA256): <textarea id="checkValue"></textarea></label><br>
+        <label>完整 POST 參數: <textarea id="completeRequest"></textarea></label>
     </div>
 
     <div class="step">
-        <h3>步驟 3: API 回應</h3>
-        <label>原始回應: <textarea id="apiResponse"></textarea></label>
+        <h3>步驟 3: 後端請求範例 (curl)</h3>
+        <textarea id="curlCommand" readonly style="height: 120px; background: #e9ecef;"></textarea>
     </div>
 
     <div class="step">
-        <h3>步驟 4: 解密結果</h3>
-        <div id="decryptedResult" class="result"></div>
+        <h3>步驟 4: 解密範例</h3>
+        <label>模擬 Result (AES密文): <input type="text" id="sampleResult" value="a1b2c3d4e5f67890123456789abcdef0" style="width: 300px;"></label>
+        <div id="decryptedResult" class="result">點擊「測試解密範例」查看結果</div>
     </div>
 
     <script>
-        const HashKey = 'Bs6NRdV1kNbsVkf0wuyYVcHcHYJTa5y4';  // 測試用 Key
-        const HashIV = 'CHiGeMvvYP1PU6uP';
-        const apiURL = 'https://inv.ezpay.com.tw/Api/inv/application/checkBarCode';
+        const HashKey = 'Bs6NRdV1kNbsVkf0wuyYVcHcHYJTa5y4';  // 32 bytes
+        const HashIV = 'CHiGeMvvYP1PU6uP';  // 16 bytes
+        const testApiURL = 'https://cinv.ezpay.com.tw/Api_inv_application/checkBarCode';  // 測試環境
+        const prodApiURL = 'https://inv.ezpay.com.tw/Api_inv_application/checkBarCode';   // 正式環境
 
-        async function executeAPI() {
+        // AES 解密函式 (用於處理 API 回傳的 Result)
+        function aesDecryptResult(resultHex) {
+            try {
+                const keyBytes = CryptoJS.enc.Utf8.parse(HashKey);
+                const ivBytes = CryptoJS.enc.Utf8.parse(HashIV);
+                const encryptedWords = CryptoJS.enc.Hex.parse(resultHex);
+                const encrypted = CryptoJS.lib.CipherParams.create({ ciphertext: encryptedWords });
+                const decrypted = CryptoJS.AES.decrypt(encrypted, keyBytes, {
+                    iv: ivBytes, 
+                    mode: CryptoJS.mode.CBC, 
+                    padding: CryptoJS.pad.Pkcs7
+                });
+                return decrypted.toString(CryptoJS.enc.Utf8);
+            } catch (e) {
+                return `解密失敗: ${e.message}`;
+            }
+        }
+
+        // 解析解密後的 query string
+        function parseDecryptedQuery(queryStr) {
+            const params = {};
+            queryStr.split('&').forEach(param => {
+                const [key, value] = param.split('=');
+                if (key && value) {
+                    params[key] = decodeURIComponent(value);
+                }
+            });
+            return params;
+        }
+
+        // 生成正確的請求資料
+        function generateRequest() {
             const merchantID = document.getElementById('merchantID').value;
             const cellphoneBarcode = document.getElementById('cellphoneBarcode').value;
             const timestamp = Math.floor(Date.now() / 1000);
 
-            // 步驟1: 建立原始資料
+            // 步驟1: 建立原始資料 (正確格式)
             const rawData = `TimeStamp=${timestamp}&CellphoneBarcode=${cellphoneBarcode}`;
             document.getElementById('rawData').value = rawData;
 
-            // 步驟2: AES-256-CBC 加密 PostData
+            // 步驟2: AES-256-CBC 加密 PostData_ (正確)
             const keyBytes = CryptoJS.enc.Utf8.parse(HashKey);
             const ivBytes = CryptoJS.enc.Utf8.parse(HashIV);
             const encrypted = CryptoJS.AES.encrypt(rawData, keyBytes, {
-                iv: ivBytes, mode: CryptoJS.mode.CBC, padding: CryptoJS.pad.Pkcs7
+                iv: ivBytes, 
+                mode: CryptoJS.mode.CBC, 
+                padding: CryptoJS.pad.Pkcs7
             });
             const postData = encrypted.ciphertext.toString(CryptoJS.enc.Hex);
             document.getElementById('postData').value = postData;
 
-            // 步驟3: 計算 CheckValue
-            const checkStr = merchantID + postData + HashKey + postData + HashIV;
+            // 步驟3: 計算 CheckValue (正確算法：HashKey=...&PostData_=...&HashIV=...)
+            const checkStr = `HashKey=${HashKey}&PostData_=${postData}&HashIV=${HashIV}`;
             const checkValue = CryptoJS.SHA256(checkStr).toString().toUpperCase();
             document.getElementById('checkValue').value = checkValue;
 
-            // 步驟4: 發送 POST 請求 (使用 fetch 模擬 cURL)
-            const formData = new URLSearchParams({
-                MerchantID: merchantID,
+            // 步驟4: 完整 POST 參數 (注意欄位名有底線)
+            const requestParams = {
+                MerchantID_: merchantID,
                 Version: '1.0',
                 RespondType: 'JSON',
-                PostData: postData,
+                PostData_: postData,
                 CheckValue: checkValue
-            });
+            };
+            document.getElementById('completeRequest').value = JSON.stringify(requestParams, null, 2);
 
-            try {
-                const response = await fetch(apiURL, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' },
-                    body: formData
-                });
-                const apiResponse = await response.text();
-                document.getElementById('apiResponse').value = apiResponse;
+            // 生成 curl 指令
+            const curlParams = Object.entries(requestParams).map(([k, v]) => 
+                `${k}=${encodeURIComponent(v)}`
+            ).join('&');
+            const curlCmd = `curl -X POST "${testApiURL}" \\
+  -H "Content-Type: application/x-www-form-urlencoded; charset=UTF-8" \\
+  --data-urlencode "${curlParams}"`;
+            document.getElementById('curlCommand').value = curlCmd;
+        }
 
-                // 步驟5: 解析並解密 Result
-                const resultObj = JSON.parse(apiResponse);
-                if (resultObj.Status === 'SUCCESS' && resultObj.Result) {
-                    const decrypted = decryptResult
+        // 測試解密功能
+        function testDecrypt() {
+            const sampleResult = document.getElementById('sampleResult').value;
+            const decryptedStr = aesDecryptResult(sampleResult);
+            const parsed = parseDecryptedQuery(decryptedStr);
+            
+            let resultHtml = `<strong>解密結果：</strong><br>${decryptedStr}`;
+            if (Object.keys(parsed).length > 0) {
+                resultHtml += `<br><br><strong>解析參數：</strong><pre>${JSON.stringify(parsed, null, 2)}</pre>`;
+            }
+            document.getElementById('decryptedResult').innerHTML = resultHtml;
+        }
 
-
+        // 初始化
+        generateRequest();
+    </script>
+</body>
+</html>
