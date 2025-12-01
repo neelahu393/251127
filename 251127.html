@@ -17,8 +17,8 @@
     
     <div class="step">
         <h3>步驟 1: 輸入參數</h3>
-        <label>MerchantID: <input type="text" id="merchantID" value="3883991"></label><br><br>
-        <label>手機條碼: <input type="text" id="cellphoneBarcode" value="ABC.122" maxlength="8"></label>
+        <label>MerchantID: <input type="text" id="merchantID" value="36267240"></label><br><br>
+        <label>手機條碼: <input type="text" id="cellphoneBarcode" value="/8CT65SP" maxlength="8"></label>
         <button onclick="executeAPI()">執行 API 串接</button>
     </div>
 
@@ -89,4 +89,5 @@
                 const resultObj = JSON.parse(apiResponse);
                 if (resultObj.Status === 'SUCCESS' && resultObj.Result) {
                     const decrypted = decryptResult
+
 
